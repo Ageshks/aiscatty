@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "372874923975",
+    "project_id": "pet-adoption-kerala",
+    "storage_bucket": "pet-adoption-kerala.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:372874923975:android:47a1932626f592edc913e2",
+        "android_client_info": {
+          "package_name": "com.example.aiscatty"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBIVTSY92BHaNCEPPzPyzwhiQhv4SJPYtk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
