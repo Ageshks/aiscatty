@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aiscatty - Data Deletion Request</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #F5E6E6;
+            color: #333;
+            line-height: 1.7;
+        }
+
+        .app-bar {
+            background-color: #D9A5A5;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .app-bar .logo {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background-color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .app-bar .logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .app-bar h1 {
+            color: #fff;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+
+        .page-title {
+            font-size: 28px;
+            font-weight: 700;
+            color: #7F5539;
+            margin-bottom: 8px;
+        }
+
+        .last-updated {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 32px;
+        }
+
+        .section {
+            margin-bottom: 28px;
+            background: #fff;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 6px rgba(127, 85, 57, 0.08);
+            border-left: 4px solid #D9A5A5;
+        }
+
+        .section h2 {
+            font-size: 17px;
+            font-weight: 700;
+            color: #7F5539;
+            margin-bottom: 12px;
+        }
+
+        .section p {
+            font-size: 14px;
+            color: #333;
+            line-height: 1.7;
+            margin-bottom: 10px;
+        }
+
+        .section ul {
+            margin: 8px 0 0 8px;
+            list-style: none;
+        }
+
+        .section ul li {
+            font-size: 14px;
+            color: #333;
+            padding: 3px 0;
+            padding-left: 18px;
+            position: relative;
+        }
+
+        .section ul li::before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            color: #D9A5A5;
+            font-weight: 700;
+        }
+
+        .steps {
+            counter-reset: step;
+            margin: 12px 0 0 0;
+            list-style: none;
+        }
+
+        .steps li {
+            font-size: 14px;
+            color: #333;
+            padding: 6px 0 6px 40px;
+            position: relative;
+        }
+
+        .steps li::before {
+            counter-increment: step;
+            content: counter(step);
+            position: absolute;
+            left: 0;
+            top: 6px;
+            width: 26px;
+            height: 26px;
+            background-color: #D9A5A5;
+            color: #fff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .email-box {
+            background-color: #F5E6E6;
+            border: 2px dashed #D9A5A5;
+            border-radius: 8px;
+            padding: 14px 18px;
+            margin: 16px 0 4px 0;
+            text-align: center;
+        }
+
+        .email-box a {
+            color: #D9A5A5;
+            font-weight: 700;
+            font-size: 16px;
+            text-decoration: none;
+        }
+
+        .email-box a:hover {
+            text-decoration: underline;
+        }
+
+        .note {
+            background-color: #FFF8F0;
+            border-left: 4px solid #B08968;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-top: 16px;
+            font-size: 13px;
+            color: #7F5539;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 30px 24px;
+            color: #999;
+            font-size: 13px;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 24px 16px;
+            }
+
+            .page-title {
+                font-size: 22px;
+            }
+
+            .section {
+                padding: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-bar">
+        <div class="logo">
+            <img src="assets/logo.png" alt="Aiscatty Logo">
+        </div>
+        <h1>Aiscatty</h1>
+    </div>
+
+    <div class="container">
+        <h1 class="page-title">Data Deletion Request</h1>
+        <p class="last-updated">Last updated: August 2026</p>
+
+        <div class="section">
+            <h2>Your Privacy Matters to Us</h2>
+            <p>
+                At Aiscatty, we respect your right to control your personal data.
+                If you wish to delete your account and all associated data from our platform,
+                you can submit a data deletion request. We will process your request promptly
+                and permanently remove your data from our systems.
+            </p>
+        </div>
+
+        <div class="section">
+            <h2>What Data Gets Deleted</h2>
+            <p>When you submit a data deletion request, we will permanently remove:</p>
+            <ul>
+                <li><strong>Account Information:</strong> Name, email address, phone number, and profile picture.</li>
+                <li><strong>Pet Listings:</strong> All pets you have listed, including photos, videos, and descriptions.</li>
+                <li><strong>Chat Messages:</strong> All messages you have exchanged with other users.</li>
+                <li><strong>Favorites & Saved Items:</strong> Your saved pets and favorite listings.</li>
+                <li><strong>Adoption Requests:</strong> All adoption requests you have sent or received.</li>
+                <li><strong>Location & Device Data:</strong> Stored location history and device information.</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h2>How to Request Data Deletion</h2>
+            <p>Follow these simple steps to request deletion of your data:</p>
+            <ol class="steps">
+                <li>Open the Aiscatty app on your device.</li>
+                <li>Go to <strong>Profile</strong> → <strong>Settings</strong>.</li>
+                <li>Tap on <strong>"Delete My Account"</strong> or <strong>"Request Data Deletion"</strong>.</li>
+                <li>Confirm your choice when prompted.</li>
+            </ol>
+
+            <div class="email-box">
+                <p style="margin-bottom: 4px; color: #7F5539;">Alternatively, email us your request at:</p>
+                <a href="mailto:support@aiscatty.app">support@aiscatty.app</a>
+            </div>
+
+            <p style="margin-top: 12px; font-size: 13px; color: #666;">
+                When emailing, please include the email address and phone number registered with your Aiscatty account so we can verify your identity and process the request securely.
+            </p>
+        </div>
+
+        <div class="section">
+            <h2>What Happens Next</h2>
+            <ul>
+                <li><strong>Acknowledgment:</strong> We will confirm receipt of your request within <strong>3 business days</strong>.</li>
+                <li><strong>Processing:</strong> Your data will be permanently deleted within <strong>30 days</strong> of your request.</li>
+                <li><strong>Confirmation:</strong> You will receive an email confirmation once your data has been fully deleted.</li>
+            </ul>
+
+            <div class="note">
+                <strong>Note:</strong> After your account is deleted, you will no longer be able to log in to Aiscatty or access any of your listings, chats, or saved data. This action is irreversible.
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Need Help?</h2>
+            <p>
+                If you have any questions about the data deletion process or need assistance,
+                please contact us at
+                <a href="mailto:support@aiscatty.app" style="color: #D9A5A5; font-weight: 600;">support@aiscatty.app</a>.
+            </p>
+        </div>
+    </div>
+
+    <div class="footer">
+        &copy; 2026 Aiscatty. All rights reserved.
+    </div>
+
+</body>
+</html>
