@@ -12,6 +12,19 @@ class MyListingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
 
+    if (user == null) {
+      return Scaffold(
+        backgroundColor: AppColors.lightGreen,
+        appBar: AppBar(
+          title: const Text("My Listings 🐾"),
+          backgroundColor: AppColors.primary,
+        ),
+        body: const Center(
+          child: Text("Please login to see your listings"),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.lightGreen,
 
@@ -23,20 +36,67 @@ class MyListingsPage extends StatelessWidget {
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('pets')
-            .where('ownerId', isEqualTo: user!.uid)
-            .orderBy('createdAt', descending: true)
+            .where('ownerId', isEqualTo: user.uid)
             .snapshots(),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            print("❌ MyListings error: ${snapshot.error}");
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline,
+                      size: 48, color: Colors.red),
+                  const SizedBox(height: 12),
+                  Text(
+                    "Error loading listings ❌\n${snapshot.error}",
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ],
+              ),
+            );
+          }
 
           if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 12),
+                  Text("Loading your listings..."),
+                ],
+              ),
+            );
           }
 
           final pets = snapshot.data!.docs;
 
           if (pets.isEmpty) {
             return const Center(
-              child: Text("No pets added yet 🐶"),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.pets, size: 64, color: Colors.grey),
+                  SizedBox(height: 12),
+                  Text(
+                    "No pets added yet 🐶",
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    "Tap + on home page to add one!",
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
             );
           }
 

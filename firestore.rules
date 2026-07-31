@@ -1,0 +1,61 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function participant(data) {
+      return signedIn() && data.approved == true && request.auth.uid in data.users;
+    }
+
+    match /pets/{petId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+    }
+
+    match /adoption_requests/{requestId} {
+      allow create: if signedIn()
+        && request.resource.data.requesterId == request.auth.uid
+        && request.resource.data.ownerId != request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow read: if signedIn() && (resource.data.ownerId == request.auth.uid || resource.data.requesterId == request.auth.uid);
+      allow update: if signedIn() && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.requesterId == resource.data.requesterId
+        && request.resource.data.petId == resource.data.petId
+        && request.resource.data.status in ['approved', 'rejected'];
+    }
+
+    match /chats/{chatId} {
+      // Only participants can read the chat document
+      allow read: if participant(resource.data);
+      // A chat can only be created for an already approved request matching
+      // the two participants and the same pet.
+      allow create: if signedIn()
+        && request.auth.uid in request.resource.data.users
+        && request.resource.data.users.size() == 2
+        && request.resource.data.approved == true
+        && getAfter(/databases/$(database)/documents/adoption_requests/$(request.resource.data.adoptionRequestId)).data.status == 'approved'
+        && getAfter(/databases/$(database)/documents/adoption_requests/$(request.resource.data.adoptionRequestId)).data.petId == request.resource.data.petId
+        && getAfter(/databases/$(database)/documents/adoption_requests/$(request.resource.data.adoptionRequestId)).data.ownerId in request.resource.data.users
+        && getAfter(/databases/$(database)/documents/adoption_requests/$(request.resource.data.adoptionRequestId)).data.requesterId in request.resource.data.users;
+      // Only participants can update, and they cannot change the users list
+      allow update: if participant(resource.data) && request.resource.data.users == resource.data.users;
+      // Prevent deletion of chat documents by anyone
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        // Only participants can read messages
+        allow read: if participant(get(/databases/$(database)/documents/chats/$(chatId)).data);
+        // Only participants can create messages, and only as themselves
+        allow create: if participant(get(/databases/$(database)/documents/chats/$(chatId)).data)
+          && request.resource.data.senderId == request.auth.uid;
+        // Prevent deletion of messages
+        allow update, delete: if false;
+      }
+    }
+
+    match /users/{userId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+  }
+}

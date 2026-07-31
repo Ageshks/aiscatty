@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Aiscatty — Fast install (ARM64 release)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "release",
+      "toolArgs": [
+        "--use-application-binary=build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+      ]
+    }
+  ]
+}

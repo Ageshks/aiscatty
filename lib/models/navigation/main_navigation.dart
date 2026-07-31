@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../home/home_page.dart';
 import '../chat/chat_page.dart';
 import '../profile/profile_page.dart';
+import '../../services/notification_controller.dart';
 import '../../utils/app_colors.dart';
 
 class MainNavigation extends StatelessWidget {
@@ -18,16 +19,37 @@ class MainNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    Get.put(NotificationController(), permanent: true);
     return Obx(() => Scaffold(
           body: pages[index.value],
           bottomNavigationBar: BottomNavigationBar(
             currentIndex: index.value,
             onTap: (i) => index.value = i,
             selectedItemColor: AppColors.primary,
-            items: const [
-              BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-              BottomNavigationBarItem(icon: Icon(Icons.chat), label: "Chat"),
-              BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
+            items: [
+              const BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
+              BottomNavigationBarItem(
+                icon: Obx(() => Badge(
+                  isLabelVisible: NotificationController.to.unreadChats.value > 0,
+                  label: Text(
+                    '${NotificationController.to.unreadChats.value}',
+                    style: const TextStyle(fontSize: 10, color: Colors.white),
+                  ),
+                  child: const Icon(Icons.chat),
+                )),
+                label: "Chat",
+              ),
+              BottomNavigationBarItem(
+                icon: Obx(() => Badge(
+                  isLabelVisible: NotificationController.to.unreadRequests.value > 0,
+                  label: Text(
+                    '${NotificationController.to.unreadRequests.value}',
+                    style: const TextStyle(fontSize: 10, color: Colors.white),
+                  ),
+                  child: const Icon(Icons.person),
+                )),
+                label: "Profile",
+              ),
             ],
           ),
         ));

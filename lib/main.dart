@@ -10,20 +10,96 @@ import 'package:aiscatty/models/profile/MyListingsPage.dart';
 import 'package:aiscatty/models/profile/adoptionRequestPage.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:get/get.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
+
 import 'firebase_options.dart';
+import 'services/background_service.dart';
+import 'services/notification_service.dart';
+
+/// 🔥 BACKGROUND HANDLER
+Future<void> _firebaseMessagingBackgroundHandler(
+    RemoteMessage message) async {
+  await Firebase.initializeApp();
+  print("📩 Background Message: ${message.notification?.title}");
+  
+  // Show local notification for background FCM messages
+  if (message.notification != null) {
+    await _showBackgroundNotification(
+      message.notification!.title ?? 'New Message',
+      message.notification!.body ?? '',
+    );
+  }
+}
+
+/// Show a local notification from background FCM handler
+Future<void> _showBackgroundNotification(String title, String body) async {
+  const androidDetails = AndroidNotificationDetails(
+    'chat_messages',
+    'Chat Messages',
+    channelDescription: 'Notifications for new chat messages',
+    importance: Importance.high,
+    priority: Priority.high,
+    showWhen: true,
+    enableVibration: true,
+    playSound: true,
+    icon: '@mipmap/ic_launcher',
+  );
+
+  const iosDetails = DarwinNotificationDetails(
+    presentAlert: true,
+    presentBadge: true,
+    presentSound: true,
+  );
+
+  const details = NotificationDetails(
+    android: androidDetails,
+    iOS: iosDetails,
+  );
+
+  await localNotifications.show(
+    DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    title,
+    body,
+    details,
+  );
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  // Android is configured through firebase_options.dart. iOS reads the
+  // bundled GoogleService-Info.plist; passing Android-only options on iOS
+  // previously stopped the app before its first screen was shown.
+  if (defaultTargetPlatform == TargetPlatform.android) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } else {
+    await Firebase.initializeApp();
+  }
 
-  /// ✅ GLOBAL CONTROLLERS (ONLY ONCE HERE)
+  /// 🔥 FCM BACKGROUND SETUP
+  FirebaseMessaging.onBackgroundMessage(
+      _firebaseMessagingBackgroundHandler);
+
+  /// ✅ GLOBAL CONTROLLERS
   Get.put(FavoritesController(), permanent: true);
   Get.put(ChatController(), permanent: true);
+
+  /// 🔥 INIT NOTIFICATIONS
+  // Notification setup must never block launching the app. It is repeated
+  // after login, when an authenticated user is available.
+  NotificationService.init();
+
+  /// 📱 INIT LOCAL NOTIFICATIONS (system notification bar)
+  await initLocalNotifications();
+
+  /// ⏰ INIT WORKMANAGER (periodic background checks)
+  await initWorkmanager();
 
   runApp(const MyApp());
 }
@@ -37,17 +113,14 @@ class MyApp extends StatelessWidget {
       title: 'Pet Adoption Kerala 🐾',
       debugShowCheckedModeBanner: false,
 
-      /// ✅ GLOBAL THEME (SAFE)
       theme: ThemeData(
         primaryColor: const Color(0xFF2ECC71),
         scaffoldBackgroundColor: Colors.white,
         useMaterial3: true,
       ),
 
-      /// ✅ SAFE INITIAL ROUTE
       initialRoute: '/splash',
 
-      /// ✅ ROUTES (CLEAN & COMPLETE)
       getPages: [
 
         /// AUTH

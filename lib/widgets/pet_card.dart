@@ -10,6 +10,7 @@ class PetCard extends StatefulWidget {
   final String mediaType;
   final String name, breed, location;
   final VoidCallback? onTap;
+  final bool compact;
 
   const PetCard({
     super.key,
@@ -20,6 +21,7 @@ class PetCard extends StatefulWidget {
     required this.breed,
     required this.location,
     this.onTap,
+    this.compact = false,
   });
 
   @override
@@ -96,11 +98,17 @@ class _PetCardState extends State<PetCard>
 
   @override
   Widget build(BuildContext context) {
+    final mediaHeight = widget.compact ? 140.0 : 200.0;
+    final nameSize = widget.compact ? 14.0 : 20.0;
+    final breedSize = widget.compact ? 11.0 : 14.0;
+    final locSize = widget.compact ? 10.0 : 12.0;
+    final marginH = widget.compact ? 0.0 : 16.0;
+    final marginV = widget.compact ? 0.0 : 10.0;
+
     return GestureDetector(
       onTap: widget.onTap,
       child: Container(
-        margin:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        margin: EdgeInsets.symmetric(horizontal: marginH, vertical: marginV),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
@@ -133,21 +141,21 @@ class _PetCardState extends State<PetCard>
                                 size: 50, color: Colors.white),
                           ],
                         )
-                      : const SizedBox(
-                          height: 200,
-                          child: Center(
+                      : SizedBox(
+                          height: mediaHeight,
+                          child: const Center(
                               child: CircularProgressIndicator()),
                         )
                   : Image.network(
                       widget.mediaUrl,
-                      height: 200,
+                      height: mediaHeight,
                       width: double.infinity,
                       fit: BoxFit.cover,
                     ),
 
               /// 🌫️ GRADIENT OVERLAY
               Container(
-                height: 200,
+                height: mediaHeight,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.bottomCenter,
@@ -162,8 +170,8 @@ class _PetCardState extends State<PetCard>
 
               /// ❤️ FAVORITE BUTTON
               Positioned(
-                top: 10,
-                right: 10,
+                top: 6,
+                right: 6,
                 child: Obx(() {
                   final isFav =
                       favController.isFavorite(widget.petId);
@@ -173,11 +181,11 @@ class _PetCardState extends State<PetCard>
                     child: ScaleTransition(
                       scale: _scaleAnimation,
                       child: Container(
-                        padding: const EdgeInsets.all(6),
+                        padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius:
-                              BorderRadius.circular(12),
+                              BorderRadius.circular(10),
                         ),
                         child: Icon(
                           isFav
@@ -186,7 +194,7 @@ class _PetCardState extends State<PetCard>
                           color: isFav
                               ? Colors.red
                               : Colors.black,
-                          size: 20,
+                          size: widget.compact ? 16 : 20,
                         ),
                       ),
                     ),
@@ -196,44 +204,50 @@ class _PetCardState extends State<PetCard>
 
               /// 🐾 PET DETAILS
               Positioned(
-                bottom: 12,
-                left: 12,
-                right: 12,
+                bottom: 8,
+                left: 8,
+                right: 8,
                 child: Column(
                   crossAxisAlignment:
                       CrossAxisAlignment.start,
                   children: [
                     Text(
                       widget.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
-                        fontSize: 20,
+                        fontSize: nameSize,
                         fontWeight: FontWeight.bold,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Text(
                       widget.breed,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white70,
-                        fontSize: 14,
+                        fontSize: breedSize,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                          horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: AppColors.primary,
                         borderRadius:
-                            BorderRadius.circular(12),
+                            BorderRadius.circular(10),
                       ),
                       child: Text(
                         widget.location,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.white,
-                          fontSize: 12,
+                          fontSize: locSize,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

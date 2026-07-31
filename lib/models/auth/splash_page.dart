@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../../services/chat_notification_listener.dart';
+import '../../services/notification_service.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -25,6 +27,13 @@ class _SplashPageState extends State<SplashPage> {
       final user = FirebaseAuth.instance.currentUser;
 
       if (user != null) {
+        // Initialize notifications for already logged-in users
+        try {
+          NotificationService.init();
+          ChatNotificationListener.init();
+        } catch (e) {
+          debugPrint("Notification init failed: $e");
+        }
         Get.offAllNamed('/home');
       } else {
         Get.offAllNamed('/login');
