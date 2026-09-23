@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:aiscatty/models/chat/chat_controller.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
@@ -33,33 +34,22 @@ class NotificationController extends GetxController {
 
     final uid = user.uid;
 
-    /// Listen to all chats the user is part of
+    /// Single real-time listener over the user's chats. The per-user
+    /// unreadCount map on each chat document is the source of truth, so no
+    /// extra per-chat message queries are needed (avoids N+1 listeners).
     _chatSub = FirebaseFirestore.instance
         .collection('chats')
         .where('users', arrayContains: uid)
         .where('approved', isEqualTo: true)
         .snapshots()
-        .listen((snapshot) async {
+        .listen((snapshot) {
       int count = 0;
       for (var doc in snapshot.docs) {
         final data = doc.data();
-        final lastReadAt = data['lastReadAt'] is Map
-            ? (data['lastReadAt'] as Map<String, dynamic>)[uid]
-            : null;
-        final lastReadTimestamp = lastReadAt is Timestamp
-            ? lastReadAt
-            : Timestamp.fromDate(DateTime(2000));
-
-        // Count messages after lastReadAt
-        final messagesSnapshot = await FirebaseFirestore.instance
-            .collection('chats')
-            .doc(doc.id)
-            .collection('messages')
-            .where('createdAt', isGreaterThan: lastReadTimestamp)
-            .where('senderId', isNotEqualTo: uid)
-            .get();
-
-        count += messagesSnapshot.docs.length;
+        // Legacy chats may not have an unreadCount field yet -> treat as 0.
+        final unreadData = data['unreadCount'] as Map<String, dynamic>? ?? {};
+        final value = unreadData[uid] ?? 0;
+        count += value is num ? value.toInt() : 0;
       }
       unreadChats.value = count;
     });
@@ -75,17 +65,13 @@ class NotificationController extends GetxController {
     });
   }
 
-  /// Mark a chat as read by the current user
+  /// Mark a chat as read by the current user (delegates to ChatController).
   Future<void> markChatAsRead(String chatId) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    await FirebaseFirestore.instance
-        .collection('chats')
-        .doc(chatId)
-        .update({
-      'lastReadAt.${user.uid}': FieldValue.serverTimestamp(),
-    });
+    try {
+      await Get.find<ChatController>().markChatAsRead(chatId);
+    } catch (_) {
+      // Not signed in / controller unavailable — nothing to mark.
+    }
   }
 
   @override

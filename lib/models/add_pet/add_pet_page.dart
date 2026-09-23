@@ -9,7 +9,9 @@ import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../../services/media_upload_service.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/kerala_districts.dart';
 
 class AddPetPage extends StatefulWidget {
   const AddPetPage({super.key});
@@ -26,35 +28,106 @@ class _AddPetPageState extends State<AddPetPage> {
 
   String? selectedAge;
   String? selectedGender;
+  String? selectedSpecies = "Dog";
   bool isVaccinated = false;
+  String status = "available";
 
   final List<String> tags = ["Friendly", "Active", "Calm", "Playful"];
   List<String> selectedTags = [];
 
   double? lat;
   double? lng;
+  String district = "";
+  final String state = "Kerala";
 
   File? selectedFile;
   String fileType = "image";
 
+  /// 🎥 Optional status video (max 30s / 50MB), uploaded separately.
+  File? statusVideoFile;
+  Duration? statusVideoDuration;
+
   final picker = ImagePicker();
   bool isUploading = false;
 
-  /// 📍 LOCATION
+  /// 📍 LOCATION — resolves coordinates and the Kerala district.
   Future<void> getLocation() async {
-    final permission = await Geolocator.requestPermission();
+    try {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        _showSnack("Location permission denied ❌ — pick district manually");
+        return;
+      }
 
-    if (permission == LocationPermission.denied) {
-      _showSnack("Location permission denied ❌");
+      final position = await Geolocator.getCurrentPosition();
+
+      setState(() {
+        lat = position.latitude;
+        lng = position.longitude;
+        district = KeralaDistricts.detectDistrict(lat!, lng!);
+        locationController.text =
+            "Location Selected ✅ ($district)";
+      });
+    } catch (e) {
+      _showSnack("Could not get location — pick district manually");
+    }
+  }
+
+  /// 🏙️ MANUAL DISTRICT PICK (fallback when GPS is unavailable)
+  Future<void> pickDistrict() async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text("Select district 📍",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            ),
+            for (final name in KeralaDistricts.names)
+              ListTile(title: Text(name), onTap: () => Navigator.pop(context, name)),
+          ],
+        ),
+      ),
+    );
+    if (picked != null) {
+      setState(() {
+        district = picked;
+        locationController.text = locationController.text.isEmpty
+            ? "District: $picked"
+            : locationController.text;
+      });
+    }
+  }
+
+  /// 🎥 STATUS VIDEO — record or pick, then validate (≤30s, ≤50MB).
+  Future<void> pickStatusVideo({required bool fromCamera}) async {
+    final picked = await picker.pickVideo(
+      source: fromCamera ? ImageSource.camera : ImageSource.gallery,
+      maxDuration: const Duration(seconds: 30),
+    );
+    if (picked == null) return;
+
+    final file = File(picked.path);
+
+    final error = await MediaUploadService.validateVideo(file);
+    if (error != null) {
+      _showSnack(error);
       return;
     }
 
-    final position = await Geolocator.getCurrentPosition();
-
     setState(() {
-      lat = position.latitude;
-      lng = position.longitude;
-      locationController.text = "Location Selected ✅";
+      statusVideoFile = file;
+      statusVideoDuration = null;
     });
   }
 
@@ -70,11 +143,20 @@ class _AddPetPageState extends State<AddPetPage> {
     }
   }
 
-  /// 🎥 VIDEO
+  /// 🎥 VIDEO (main listing media)
   Future<void> pickVideo() async {
-    final picked = await picker.pickVideo(source: ImageSource.gallery);
+    final picked = await picker.pickVideo(
+      source: ImageSource.gallery,
+      maxDuration: const Duration(seconds: 30),
+    );
 
     if (picked != null) {
+      final file = File(picked.path);
+      final error = await MediaUploadService.validateVideo(file);
+      if (error != null) {
+        _showSnack(error);
+        return;
+      }
       setState(() {
         selectedFile = File(picked.path);
         fileType = "video";
@@ -124,12 +206,23 @@ class _AddPetPageState extends State<AddPetPage> {
       return _showSnack("Fill all required fields");
     }
 
-    if (lat == null) return _showSnack("Select location 📍");
+    if (district.isEmpty) {
+      return _showSnack("Pick your district 📍 (use location or select manually)");
+    }
     if (selectedFile == null) return _showSnack("Upload media");
 
     try {
       String? fileUrl = await uploadFile();
-      if (fileUrl == null) return _showSnack("Upload failed");
+      if (fileUrl == null) return _showSnack("Upload failed ❌");
+
+      // 🎥 Optional status video — only the URL is stored, never the binary.
+      String? statusVideoUrl;
+      if (statusVideoFile != null) {
+        statusVideoUrl = await MediaUploadService.uploadFile(statusVideoFile!);
+        if (statusVideoUrl == null) {
+          _showSnack("Video upload failed — saving pet without video");
+        }
+      }
 
       await FirebaseFirestore.instance.collection('pets').add({
         "name": nameController.text.trim(),
@@ -139,14 +232,21 @@ class _AddPetPageState extends State<AddPetPage> {
         "gender": selectedGender,
         "vaccinated": isVaccinated,
         "tags": selectedTags,
+        "species": selectedSpecies,
 
         "location": locationController.text,
-        "lat": lat,
-        "lng": lng,
-        "state": "Kerala",
+        "district": district,
+        "state": state,
+        "latitude": lat,
+        "longitude": lng,
 
         "mediaUrl": fileUrl,
         "mediaType": fileType,
+        if (statusVideoUrl != null) "statusVideoUrl": statusVideoUrl,
+        if (statusVideoDuration != null)
+          "statusVideoDuration": statusVideoDuration!.inSeconds,
+
+        "status": status,
 
         "ownerId": user.uid,
         "ownerEmail": user.email,
@@ -270,6 +370,15 @@ class _AddPetPageState extends State<AddPetPage> {
               child: Column(
                 children: [
                   DropdownButtonFormField(
+                    hint: const Text("Species"),
+                    initialValue: selectedSpecies,
+                    items: ["Dog", "Cat", "Bird", "Rabbit", "Other"]
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                        .toList(),
+                    onChanged: (val) => setState(() => selectedSpecies = val),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField(
                     hint: const Text("Select Age"),
                     items: ["Puppy", "Young", "Adult"]
                         .map((e) => DropdownMenuItem(value: e, child: Text(e)))
@@ -307,11 +416,90 @@ class _AddPetPageState extends State<AddPetPage> {
                 children: [
                   _input(locationController, "Location", readOnly: true),
                   const SizedBox(height: 10),
-                  ElevatedButton.icon(
-                    onPressed: getLocation,
-                    icon: const Icon(Icons.location_on),
-                    label: const Text("Use Current Location"),
+                  if (district.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          "District: $district • State: $state",
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 13),
+                        ),
+                      ),
+                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: getLocation,
+                          icon: const Icon(Icons.location_on),
+                          label: const Text("Use Current Location"),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: pickDistrict,
+                        icon: const Icon(Icons.list),
+                        label: const Text("Pick District"),
+                      ),
+                    ],
                   ),
+                ],
+              ),
+            ),
+
+            /// 🎥 STATUS VIDEO
+            _card(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("Add a short video of your pet 🎥",
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  const Text(
+                    "Up to 30 seconds • max 50 MB",
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => pickStatusVideo(fromCamera: true),
+                          icon: const Icon(Icons.videocam),
+                          label: const Text("Record"),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => pickStatusVideo(fromCamera: false),
+                          icon: const Icon(Icons.photo_library),
+                          label: const Text("Gallery"),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (statusVideoFile != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              "Video selected 🎥 (preview before upload)",
+                              style: TextStyle(fontSize: 13),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            tooltip: "Remove video",
+                            onPressed: () =>
+                                setState(() => statusVideoFile = null),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),

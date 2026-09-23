@@ -18,6 +18,8 @@ class ChatController extends GetxController {
 
   /// An adoption request is the only way a prospective adopter can start
   /// contact. A chat is deliberately not created at this point.
+  ///
+  /// Requests are only allowed while the pet is 'available'.
   Future<String> requestAdoption({
     required String ownerId,
     required String petId,
@@ -26,6 +28,21 @@ class ChatController extends GetxController {
     final requesterId = _uid;
     if (ownerId.isEmpty || ownerId == requesterId) {
       throw StateError('You cannot request adoption for your own pet.');
+    }
+
+    // Block requests for pending/adopted pets (missing field = available).
+    try {
+      final petDoc = await _firestore.collection('pets').doc(petId).get();
+      final status = petDoc.data()?['status']?.toString() ?? 'available';
+      if (status == 'adopted') {
+        throw StateError('This pet has already been adopted ❤️');
+      }
+      if (status == 'pending') {
+        throw StateError('Adoption is already in progress for this pet.');
+      }
+    } catch (e) {
+      if (e is StateError) rethrow;
+      // Firestore hiccup — allow the request to proceed rather than block.
     }
 
     final requestId = '${petId}_${requesterId}';
@@ -75,6 +92,14 @@ class ChatController extends GetxController {
         'lastMessage': 'Adoption request approved. You can now chat.',
         'updatedAt': FieldValue.serverTimestamp(),
         'createdAt': FieldValue.serverTimestamp(),
+        'ownerId': _uid,
+        'requesterId': requesterId,
+        // Per-user unread counters. Each participant has their own count so
+        // two users can have different unread numbers.
+        'unreadCount': {
+          _uid: 0,
+          requesterId: 0,
+        },
       }, SetOptions(merge: true));
       transaction.update(requestRef, {
         'status': 'approved',
@@ -82,8 +107,40 @@ class ChatController extends GetxController {
         'updatedAt': FieldValue.serverTimestamp(),
         'approvedAt': FieldValue.serverTimestamp(),
       });
+      // Approval moves the pet to 'pending' — NOT adopted. The owner must
+      // explicitly confirm the adoption afterwards.
+      transaction.update(_firestore.collection('pets').doc(petId), {
+        'status': 'pending',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
       return chatId;
     });
+  }
+
+  /// Owner confirms the adoption. This is the only step that permanently
+  /// marks the pet as adopted and closes further requests.
+  Future<void> confirmAdoption({
+    required String petId,
+    required String requestId,
+  }) async {
+    if (petId.isEmpty) throw StateError('Pet information missing.');
+    final requestRef = _firestore.collection('adoption_requests').doc(requestId);
+    final request = await requestRef.get();
+    if (!request.exists) throw StateError('Adoption request was not found.');
+    if (request.data()?['ownerId'] != _uid) {
+      throw StateError('Only the pet owner can confirm the adoption.');
+    }
+
+    final batch = _firestore.batch();
+    batch.update(requestRef, {
+      'status': 'completed',
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    batch.update(_firestore.collection('pets').doc(petId), {
+      'status': 'adopted',
+      'adoptedAt': FieldValue.serverTimestamp(),
+    });
+    await batch.commit();
   }
 
   Future<void> rejectRequest(String requestId) {
@@ -153,14 +210,56 @@ class ChatController extends GetxController {
       throw StateError('This conversation is not available.');
     }
 
-    await chatRef.collection('messages').add({
+    // The other participant is the receiver of this message.
+    final users = List<String>.from(data['users'] as List);
+    final receiverId = users.firstWhere((id) => id != _uid, orElse: () => '');
+
+    // Atomically write the message and bump the receiver's unread counter.
+    // The sender's unread count is never increased.
+    final batch = _firestore.batch();
+    batch.set(chatRef.collection('messages').doc(), {
       ...message,
       'senderId': _uid,
+      'receiverId': receiverId,
+      'isRead': false,
       'createdAt': FieldValue.serverTimestamp(),
     });
-    await chatRef.update({
+    batch.update(chatRef, {
       'lastMessage': message['text'],
       'updatedAt': FieldValue.serverTimestamp(),
+      // Dot notation creates the unreadCount map if it does not exist yet
+      // (e.g. chats created before this field was introduced).
+      if (receiverId.isNotEmpty) 'unreadCount.$receiverId': FieldValue.increment(1),
     });
+    await batch.commit();
+  }
+
+  /// Marks the conversation as read for the currently logged-in user only.
+  ///
+  /// - Resets this user's entry in the chat's unreadCount map to 0.
+  /// - Marks only messages received by this user (senderId != me) as read.
+  ///   Messages sent by the current user are never modified.
+  Future<void> markChatAsRead(String chatId) async {
+    final uid = _uid;
+    final chatRef = _firestore.collection('chats').doc(chatId);
+    final chat = await chatRef.get();
+    if (!chat.exists) return;
+
+    final batch = _firestore.batch();
+
+    // Reset only my unread counter; the other participant's count is untouched.
+    batch.update(chatRef, {'unreadCount.$uid': 0});
+
+    // Mark unread messages that I received as read.
+    final unreadReceived = await chatRef
+        .collection('messages')
+        .where('senderId', isNotEqualTo: uid)
+        .where('isRead', isEqualTo: false)
+        .get();
+    for (final doc in unreadReceived.docs) {
+      batch.update(doc.reference, {'isRead': true});
+    }
+
+    await batch.commit();
   }
 }

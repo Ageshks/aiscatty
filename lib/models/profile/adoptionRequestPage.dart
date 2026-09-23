@@ -67,23 +67,71 @@ class AdoptionRequestsPage extends StatelessWidget {
   Widget _statusWidget(String requestId, Map<String, dynamic> data) {
     final status = data['status']?.toString() ?? 'pending';
     if (status == 'approved') {
-      return TextButton.icon(icon: const Icon(Icons.chat), label: const Text('Chat'), onPressed: () {
-        final requesterId = data['requesterId']?.toString() ?? '';
-        if (requesterId.isNotEmpty) {
-          FirebaseFirestore.instance.collection('users').doc(requesterId).get().then((userDoc) {
-            final userName = (userDoc.data()?['name']?.toString()) ?? 'User';
-            Get.toNamed('/chat-detail', arguments: {'chatId': data['chatId'], 'otherUserName': userName});
-          });
-        } else {
-          Get.toNamed('/chat-detail', arguments: {'chatId': data['chatId'], 'otherUserName': 'User'});
-        }
-      });
+      // Approved: chat available + owner can confirm adoption (pet → adopted).
+      return Row(mainAxisSize: MainAxisSize.min, children: [
+        TextButton.icon(icon: const Icon(Icons.chat), label: const Text('Chat'), onPressed: () {
+          final requesterId = data['requesterId']?.toString() ?? '';
+          if (requesterId.isNotEmpty) {
+            FirebaseFirestore.instance.collection('users').doc(requesterId).get().then((userDoc) {
+              final userName = (userDoc.data()?['name']?.toString()) ?? 'User';
+              Get.toNamed('/chat-detail', arguments: {
+                'chatId': data['chatId'],
+                'otherUserName': userName,
+                'petId': data['petId']?.toString() ?? '',
+                'petName': data['petName']?.toString() ?? 'Pet',
+              });
+            });
+          } else {
+            Get.toNamed('/chat-detail', arguments: {'chatId': data['chatId'], 'otherUserName': 'User'});
+          }
+        }),
+        Tooltip(
+          message: 'Confirm adoption — marks the pet as Adopted',
+          child: TextButton.icon(
+            icon: const Icon(Icons.verified, color: Colors.green),
+            label: const Text('Confirm', style: TextStyle(color: Colors.green)),
+            onPressed: () => _confirmAdoption(requestId, data),
+          ),
+        ),
+      ]);
     }
     if (status == 'rejected') return const Text('Rejected', style: TextStyle(color: Colors.red));
+    if (status == 'completed') {
+      return const Text('Adopted ❤️', style: TextStyle(color: Colors.green, fontWeight: FontWeight.w700));
+    }
     return Row(mainAxisSize: MainAxisSize.min, children: [
       IconButton(icon: const Icon(Icons.check, color: Colors.green), tooltip: 'Approve and enable chat', onPressed: () => _approve(requestId, data)),
       IconButton(icon: const Icon(Icons.close, color: Colors.red), tooltip: 'Decline request', onPressed: () => _reject(requestId)),
     ]);
+  }
+
+  /// Owner confirms the adoption → pet status becomes 'adopted'.
+  Future<void> _confirmAdoption(String requestId, Map<String, dynamic> data) async {
+    final confirmed = await Get.dialog<bool>(
+      AlertDialog(
+        title: const Text('Confirm adoption 🏡'),
+        content: const Text(
+            'This will permanently mark the pet as Adopted ❤️ and stop new requests. Continue?'),
+        actions: [
+          TextButton(onPressed: () => Get.back(result: false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+            onPressed: () => Get.back(result: true),
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await Get.find<ChatController>().confirmAdoption(
+        petId: data['petId']?.toString() ?? '',
+        requestId: requestId,
+      );
+      Get.snackbar('Adoption confirmed', 'The pet is now marked as Adopted ❤️');
+    } catch (error) {
+      Get.snackbar('Could not confirm adoption', error.toString());
+    }
   }
 
   Future<void> _approve(String requestId, Map<String, dynamic> data) async {

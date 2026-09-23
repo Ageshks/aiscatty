@@ -86,6 +86,7 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
           }
 
           return Column(children: [
+            _petPreview(chatData['petId']?.toString() ?? ''),
             Expanded(child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance.collection('chats').doc(chatId).collection('messages').orderBy('createdAt', descending: false).snapshots(),
               builder: (context, snapshot) {
@@ -128,6 +129,64 @@ class _ChatDetailPageState extends State<ChatDetailPage> {
     Expanded(child: TextField(controller: textController, textCapitalization: TextCapitalization.sentences, decoration: const InputDecoration(hintText: 'Type message...', border: OutlineInputBorder()))),
     IconButton(icon: const Icon(Icons.send), color: AppColors.primary, onPressed: _sendText),
   ])));
+
+  /// 🐶 Pet preview card at the top of the chat — links back to the listing.
+  /// All field reads are safe; the card is simply hidden when data is missing.
+  Widget _petPreview(String petId) {
+    if (petId.isEmpty) return const SizedBox.shrink();
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('pets').doc(petId).snapshots(),
+      builder: (context, snapshot) {
+        final data = snapshot.data?.data() as Map<String, dynamic>?;
+        if (data == null) return const SizedBox.shrink();
+        final name = data['name']?.toString() ?? 'Pet';
+        final breed = data['breed']?.toString() ?? '';
+        final location = data['location']?.toString() ?? '';
+        final district = data['district']?.toString() ?? '';
+        final place = [
+          if (location.isNotEmpty) location,
+          if (district.isNotEmpty) district,
+        ].join(', ');
+        final mediaUrl = data['mediaUrl']?.toString() ?? '';
+
+        return Container(
+          margin: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 3))],
+          ),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: mediaUrl.isEmpty
+                    ? Container(width: 52, height: 52, color: AppColors.lightBlue, child: const Icon(Icons.pets))
+                    : Image.network(mediaUrl, width: 52, height: 52, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(width: 52, height: 52, color: AppColors.lightBlue, child: const Icon(Icons.pets))),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('🐶 $name', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                    if (breed.isNotEmpty) Text(breed, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    if (place.isNotEmpty) Text(place, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: () => Get.toNamed('/pet-details', arguments: {...data, 'id': petId}),
+                child: const Text('View Pet'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   Future<void> _sendText() async {
     try { await controller.sendText(chatId, textController.text); textController.clear(); } catch (error) { _showError(error); }

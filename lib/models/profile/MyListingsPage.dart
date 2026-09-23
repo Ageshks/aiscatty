@@ -4,6 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../utils/app_colors.dart';
+import '../../widgets/pet_status_badge.dart';
+import 'pet_edit_page.dart';
 
 class MyListingsPage extends StatelessWidget {
   const MyListingsPage({super.key});
@@ -104,33 +106,101 @@ class MyListingsPage extends StatelessWidget {
             itemCount: pets.length,
             itemBuilder: (context, index) {
               final pet = pets[index];
-              final data = pet.data() as Map<String, dynamic>;
+              final data = pet.data() as Map<String, dynamic>? ?? {};
+
+              // 🛡️ Safe reads for every field.
+              final name = data['name']?.toString() ?? 'Pet';
+              final breed = data['breed']?.toString() ?? '';
+              final location = data['location']?.toString() ?? '';
+              final district = data['district']?.toString() ?? '';
+              final place = [
+                if (location.isNotEmpty) location,
+                if (district.isNotEmpty) district,
+              ].join(', ');
+              final status = data['status']?.toString() ?? 'available';
+              final hasVideo =
+                  (data['statusVideoUrl']?.toString() ?? '').isNotEmpty;
+              final mediaUrl = data['mediaUrl']?.toString() ?? '';
 
               return Container(
                 margin: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(15),
-                ),
-                child: ListTile(
-                  leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.network(
-                      data['mediaUrl'],
-                      width: 60,
-                      height: 60,
-                      fit: BoxFit.cover,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
                     ),
-                  ),
-
-                  title: Text(data['name'] ?? "Pet"),
-                  subtitle: Text(data['breed'] ?? ""),
-
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () {
-                      _confirmDelete(context, pet.id);
-                    },
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: mediaUrl.isEmpty
+                                ? Container(width: 60, height: 60, color: AppColors.lightBlue, child: const Icon(Icons.pets))
+                                : Image.network(mediaUrl, width: 60, height: 60, fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Container(width: 60, height: 60, color: AppColors.lightBlue, child: const Icon(Icons.pets))),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                                if (breed.isNotEmpty) Text(breed, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+                                if (place.isNotEmpty) Text(place, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                              ],
+                            ),
+                          ),
+                          PetStatusBadge(status: status, compact: true),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      // 🎥 Video availability + ❤️ request count + actions
+                      Row(
+                        children: [
+                          if (hasVideo)
+                            const Padding(
+                              padding: EdgeInsets.only(right: 12),
+                              child: Text('🎥 Status Video',
+                                  style: TextStyle(fontSize: 12, color: AppColors.black)),
+                            ),
+                          FutureBuilder<QuerySnapshot>(
+                            future: FirebaseFirestore.instance
+                                .collection('adoption_requests')
+                                .where('petId', isEqualTo: pet.id)
+                                .get(),
+                            builder: (context, reqSnap) {
+                              final count = reqSnap.data?.docs.length ?? 0;
+                              return Text('❤️ $count Requests',
+                                  style: const TextStyle(fontSize: 12, color: AppColors.black));
+                            },
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.edit, color: AppColors.blue),
+                            tooltip: 'Edit listing',
+                            onPressed: () => Get.to(() => PetEditPage(
+                                  petId: pet.id,
+                                  petData: data,
+                                )),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            tooltip: 'Delete listing',
+                            onPressed: () => _confirmDelete(context, pet.id),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               );

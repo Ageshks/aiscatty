@@ -88,19 +88,53 @@ class FavoritesPage extends StatelessWidget {
             itemBuilder: (context, index) {
               final data = docs[index].data() as Map<String, dynamic>;
               final pet = data['petData'] ?? {};
+              // 🛡️ Safe reads — favorites saved by older app versions may
+              // not contain the newer fields.
+              final status = pet['status']?.toString() ?? 'available';
+              final isAdopted = status == 'adopted';
+              final location = pet['location']?.toString() ?? 'Unknown';
+              final district = pet['district']?.toString() ?? '';
+              final place = district.isEmpty
+                  ? location
+                  : (location.isEmpty ? district : "$location, $district");
 
-              return PetCard(
-                petId: data['petId'] ?? "", // ✅ FIXED
+              return Stack(
+                children: [
+                  PetCard(
+                    petId: data['petId'] ?? "",
 
-                // ✅ SAFE DATA
-                mediaUrl: pet['mediaUrl'] ?? "https://placedog.net/500",
-                mediaType: pet['mediaType'] ?? "image",
-                name: pet['name'] ?? "Unknown",
-                breed: pet['breed'] ?? "Unknown",
-                location: pet['location'] ?? "Unknown",
+                    // ✅ SAFE DATA
+                    mediaUrl: pet['mediaUrl'] ?? "https://placedog.net/500",
+                    mediaType: pet['mediaType'] ?? "image",
+                    name: pet['name'] ?? "Unknown",
+                    breed: pet['breed'] ?? "Unknown",
+                    location: place,
 
-                onTap: () =>
-                    Get.toNamed('/pet-details', arguments: pet),
+                    onTap: () =>
+                        Get.toNamed('/pet-details', arguments: pet),
+                  ),
+                  if (isAdopted)
+                    Positioned(
+                      left: 12,
+                      top: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade700,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          "Adopted ❤️",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               );
             },
           );

@@ -31,8 +31,8 @@ class _NearbyPetsPageState extends State<NearbyPetsPage> {
         backgroundColor: AppColors.lightGreen,
         elevation: 0,
         title: const Text(
-          "Nearby Pets 📍",
-          style: TextStyle(color: Colors.black),
+          "Pets Near You 📍",
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.w700),
         ),
         iconTheme: const IconThemeData(color: Colors.black),
       ),
@@ -68,10 +68,15 @@ class _NearbyPetsPageState extends State<NearbyPetsPage> {
 
                 const SizedBox(height: 6),
 
-                const Text(
-                  "Try moving to a different area",
-                  style: TextStyle(color: Colors.grey),
-                ),
+                Obx(() {
+                  final district = controller.activeDistrict.value;
+                  return Text(
+                    district.isEmpty
+                        ? "Select your district to see pets near you"
+                        : "No pets listed in $district yet",
+                    style: const TextStyle(color: Colors.grey),
+                  );
+                }),
 
                 const SizedBox(height: 20),
 
@@ -89,29 +94,69 @@ class _NearbyPetsPageState extends State<NearbyPetsPage> {
           );
         }
 
-        // 🐾 PET LIST
-        return ListView.builder(
-          itemCount: controller.pets.length,
-          itemBuilder: (context, index) {
-            final pet = controller.pets[index];
+        // 🐾 PET LIST (header + list)
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Adopt a pet from your district",
+                    style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                  ),
+                  const SizedBox(height: 2),
+                  Obx(() {
+                    final district = controller.activeDistrict.value;
+                    return Text(
+                      district.isEmpty
+                          ? "Showing pets across Kerala"
+                          : "Showing pets in $district District",
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.black,
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                itemCount: controller.pets.length,
+                itemBuilder: (context, index) {
+                  final pet = controller.pets[index];
+                  final location = pet['location']?.toString() ?? '';
+                  final petDistrict = pet['district']?.toString() ?? '';
+                  final place = [
+                    if (location.isNotEmpty) location,
+                    if (petDistrict.isNotEmpty) petDistrict,
+                  ].join(', ');
+                  final distanceKm = pet['distanceKm']?.toString();
 
-            return PetCard(
-              petId: pet['id'], // 🔥 MUST HAVE
-              mediaUrl: pet['mediaUrl'],
-              mediaType: pet['mediaType'],
-              name: pet['name'],
-              breed: pet['breed'],
-              location:
-                  "${pet['location']} • ${pet['distance']} km",
-              onTap: () {
-  Get.toNamed('/pet-details', arguments: {
-    ...pet,
-    "id": pet['id'],
-    "ownerId": pet['ownerId'],
-  });
-},
-            );
-          },
+                  return PetCard(
+                    petId: pet['id']?.toString() ?? '',
+                    mediaUrl: pet['mediaUrl']?.toString() ?? '',
+                    mediaType: pet['mediaType']?.toString() ?? 'image',
+                    name: pet['name']?.toString() ?? 'Pet',
+                    breed: pet['breed']?.toString() ?? '',
+                    location: distanceKm != null && distanceKm.isNotEmpty
+                        ? "$place • $distanceKm km"
+                        : place,
+                    onTap: () {
+                      Get.toNamed('/pet-details', arguments: {
+                        ...pet,
+                        "id": pet['id']?.toString() ?? '',
+                        "ownerId": pet['ownerId']?.toString() ?? '',
+                      });
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
         );
       }),
     );

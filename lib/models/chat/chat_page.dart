@@ -81,26 +81,13 @@ class ChatPage extends StatelessWidget {
                   final otherUserName = otherUserData?['name']?.toString() ?? (otherUserId.isNotEmpty ? 'User' : 'Unknown');
                   final avatarLetter = otherUserName.isNotEmpty ? otherUserName[0].toUpperCase() : '?';
 
-                  /// Get unread count for this chat
-                  final lastReadAt = data['lastReadAt'] is Map
-                      ? (data['lastReadAt'] as Map<String, dynamic>)[user.uid]
-                      : null;
-                  final lastReadTimestamp = lastReadAt is Timestamp
-                      ? lastReadAt
-                      : Timestamp.fromDate(DateTime(2000));
+                  /// Unread count for the current user, stored per-user on the
+                  /// chat doc. Legacy chats may not have the field — treat as 0.
+                  final unreadData = data['unreadCount'] as Map<String, dynamic>? ?? {};
+                  final value = unreadData[user.uid] ?? 0;
+                  final unreadCount = value is num ? value.toInt() : 0;
 
-                  return StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('chats')
-                        .doc(doc.id)
-                        .collection('messages')
-                        .where('createdAt', isGreaterThan: lastReadTimestamp)
-                        .where('senderId', isNotEqualTo: user.uid)
-                        .snapshots(),
-                    builder: (context, msgSnapshot) {
-                      final unreadCount = msgSnapshot.data?.docs.length ?? 0;
-
-                      return GestureDetector(
+                  return GestureDetector(
                         onTap: () {
                           Get.toNamed('/chat-detail', arguments: {
                             "chatId": doc.id,
@@ -245,9 +232,7 @@ class ChatPage extends StatelessWidget {
                           ),
                         ),
                       );
-                    },
-                  );
-                },
+                  },
               );
             },
           );

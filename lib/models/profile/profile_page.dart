@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 
 import '../../utils/app_colors.dart';
+import '../../services/location_service.dart';
 import 'privacy_policy_page.dart';
 import 'terms_conditions_page.dart';
 
@@ -204,6 +205,18 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
 
                 _buildTile(
+                  icon: Icons.location_on_outlined,
+                  title: "My District",
+                  subtitle: LocationService.to.selectedDistrict.value.isEmpty
+                      ? "Not set — tap to select"
+                      : LocationService.to.selectedDistrict.value,
+                  onTap: () async {
+                    await LocationService.to.pickDistrictManually(context);
+                    setState(() {});
+                  },
+                ),
+
+                _buildTile(
                   icon: Icons.privacy_tip,
                   title: "Privacy Policy",
                   onTap: () => Get.to(() => const PrivacyPolicyPage()),
@@ -236,10 +249,12 @@ class _ProfilePageState extends State<ProfilePage> {
     required IconData icon,
     required String title,
     required VoidCallback onTap,
+    String? subtitle,
   }) {
     return ListTile(
       leading: Icon(icon, color: AppColors.primary),
       title: Text(title),
+      subtitle: subtitle == null ? null : Text(subtitle, style: const TextStyle(fontSize: 12)),
       trailing: const Icon(Icons.arrow_forward_ios, size: 16),
       onTap: onTap,
     );

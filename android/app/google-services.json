@@ -9,10 +9,23 @@
       "client_info": {
         "mobilesdk_app_id": "1:372874923975:android:47a1932626f592edc913e2",
         "android_client_info": {
-          "package_name": "com.agesh.aiscatty"
+          "package_name": "com.example.aiscatty"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "372874923975-fh90c6gl3bethhkvvupbaccfnng141co.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.aiscatty",
+            "certificate_hash": "39fa0cc53e8b38f37caf02ab4f85eafc9563adff"
+          }
+        },
+        {
+          "client_id": "372874923975-n19ivnkuv3q9gj6lgcmj4k4bm12skjfr.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBIVTSY92BHaNCEPPzPyzwhiQhv4SJPYtk"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "372874923975-n19ivnkuv3q9gj6lgcmj4k4bm12skjfr.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "372874923975-3n97kngm1agrc5bpeggn43s0lkfmphqt.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.aiscatty"
+              }
+            }
+          ]
         }
       }
     }

@@ -32,6 +32,10 @@ class _PetCardState extends State<PetCard>
     with SingleTickerProviderStateMixin {
   VideoPlayerController? _videoController;
 
+  /// Set when the video could not be loaded, so the card shows a fallback
+  /// placeholder instead of an endless spinner.
+  bool _videoFailed = false;
+
   late AnimationController _heartController;
   late Animation<double> _scaleAnimation;
 
@@ -42,13 +46,17 @@ class _PetCardState extends State<PetCard>
   void initState() {
     super.initState();
 
-    // 🎥 VIDEO INIT
-    if (widget.mediaType == "video") {
-      _videoController =
-          VideoPlayerController.network(widget.mediaUrl)
-            ..initialize().then((_) {
-              setState(() {});
-            });
+    // 🎥 VIDEO INIT (only when a video was actually stored)
+    if (widget.mediaType == "video" && widget.mediaUrl.isNotEmpty) {
+      _videoController = VideoPlayerController.network(widget.mediaUrl)
+        ..initialize().then((_) {
+          if (mounted) setState(() {});
+        }).catchError((Object e) {
+          // A broken or removed video must never break the whole card.
+          debugPrint('⚠️ Video preview failed: $e');
+          _videoFailed = true;
+          if (mounted) setState(() {});
+        });
     }
 
     // ❤️ HEART ANIMATION
@@ -78,8 +86,6 @@ class _PetCardState extends State<PetCard>
   }
 
   void onFavoriteTap() {
-    final isFav = favController.isFavorite(widget.petId);
-
     // ❤️ Animation trigger
     _heartController.forward(from: 0);
 
@@ -96,8 +102,78 @@ class _PetCardState extends State<PetCard>
     );
   }
 
+  /// Media area with a graceful placeholder for missing/deleted media.
+  Widget _buildMedia(double mediaHeight) {
+    // 1) Video
+    if (widget.mediaType == "video" && widget.mediaUrl.isNotEmpty) {
+      if (_videoFailed) {
+        return _mediaPlaceholder(mediaHeight, Icons.videocam_off_outlined);
+      }
+      final controller = _videoController;
+      if (controller == null || !controller.value.isInitialized) {
+        return SizedBox(
+          height: mediaHeight,
+          width: double.infinity,
+          child: const Center(child: CircularProgressIndicator()),
+        );
+      }
+      return Stack(
+        alignment: Alignment.center,
+        children: [
+          AspectRatio(
+            aspectRatio: controller.value.aspectRatio,
+            child: VideoPlayer(controller),
+          ),
+          const Icon(Icons.play_circle, size: 50, color: Colors.white),
+        ],
+      );
+    }
+
+    // 2) Image — a listing without a photo (or with a deleted one) must still
+    //    render instead of throwing.
+    if (widget.mediaUrl.isEmpty) {
+      return _mediaPlaceholder(mediaHeight, Icons.pets);
+    }
+
+    return Image.network(
+      widget.mediaUrl,
+      height: mediaHeight,
+      width: double.infinity,
+      fit: BoxFit.cover,
+      loadingBuilder: (context, child, progress) {
+        if (progress == null) return child;
+        return SizedBox(
+          height: mediaHeight,
+          width: double.infinity,
+          child: const Center(child: CircularProgressIndicator()),
+        );
+      },
+      // 🛡️ Safe handling for deleted / broken media URLs.
+      errorBuilder: (context, error, stackTrace) {
+        debugPrint('⚠️ Image failed for ${widget.petId}: $error');
+        return _mediaPlaceholder(mediaHeight, Icons.pets);
+      },
+    );
+  }
+
+  Widget _mediaPlaceholder(double mediaHeight, IconData icon) {
+    return Container(
+      height: mediaHeight,
+      width: double.infinity,
+      color: AppColors.lightGreen,
+      child: Center(
+        child: Icon(
+          icon,
+          size: widget.compact ? 28 : 40,
+          color: AppColors.primary.withOpacity(0.5),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+
     final mediaHeight = widget.compact ? 140.0 : 200.0;
     final nameSize = widget.compact ? 14.0 : 20.0;
     final breedSize = widget.compact ? 11.0 : 14.0;
@@ -125,33 +201,7 @@ class _PetCardState extends State<PetCard>
             children: [
 
               /// 🔥 MEDIA (IMAGE / VIDEO)
-              widget.mediaType == "video"
-                  ? (_videoController != null &&
-                          _videoController!.value.isInitialized)
-                      ? Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            AspectRatio(
-                              aspectRatio:
-                                  _videoController!.value.aspectRatio,
-                              child:
-                                  VideoPlayer(_videoController!),
-                            ),
-                            const Icon(Icons.play_circle,
-                                size: 50, color: Colors.white),
-                          ],
-                        )
-                      : SizedBox(
-                          height: mediaHeight,
-                          child: const Center(
-                              child: CircularProgressIndicator()),
-                        )
-                  : Image.network(
-                      widget.mediaUrl,
-                      height: mediaHeight,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                    ),
+              _buildMedia(mediaHeight),
 
               /// 🌫️ GRADIENT OVERLAY
               Container(

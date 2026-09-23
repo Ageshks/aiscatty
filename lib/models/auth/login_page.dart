@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../utils/app_colors.dart';
+import '../../widgets/google_logo.dart';
 import 'login_controller.dart';
 
 class LoginPage extends StatefulWidget {
@@ -31,6 +32,7 @@ class _LoginPageState extends State<LoginPage> {
   // ── State ──
   bool isLogin = true;
   bool isLoading = false;
+  bool googleLoading = false;
 
   // ── Show/Hide Password ──
   bool loginPasswordVisible = false;
@@ -108,6 +110,162 @@ class _LoginPageState extends State<LoginPage> {
       password: regPasswordController.text,
     );
     setState(() => isLoading = false);
+  }
+
+  // ── Handle Google Sign-In ──
+  Future<void> handleGoogleSignIn() async {
+    if (googleLoading || isLoading) return;
+
+    FocusScope.of(context).unfocus();
+    setState(() => googleLoading = true);
+
+    await authController.signInWithGoogle();
+
+    // The controller navigates away on success, so guard the rebuild.
+    if (mounted) {
+      setState(() => googleLoading = false);
+    }
+  }
+
+  // ── Handle Forgot Password ──
+  Future<void> handleForgotPassword() async {
+    // Pre-fill with whatever the user already typed in the email field.
+    final emailController = TextEditingController(
+      text: loginEmailController.text.trim(),
+    );
+    bool sending = false;
+    String? errorText;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> sendResetEmail() async {
+              final email = emailController.text.trim();
+
+              if (validateEmail(email) != null) {
+                setDialogState(() => errorText = "Please enter a valid email");
+                return;
+              }
+
+              setDialogState(() {
+                sending = true;
+                errorText = null;
+              });
+
+              final sent = await authController.resetPassword(email);
+
+              if (!dialogContext.mounted) return;
+
+              if (sent) {
+                Navigator.of(dialogContext).pop();
+                Get.snackbar(
+                  "Email sent 📧",
+                  "A password reset link was sent to $email",
+                  snackPosition: SnackPosition.BOTTOM,
+                  duration: const Duration(seconds: 4),
+                );
+              } else {
+                // Keep the dialog open so the user can correct the email.
+                setDialogState(() => sending = false);
+              }
+            }
+
+            return AlertDialog(
+              backgroundColor: AppColors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+              contentPadding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+              actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              title: const Text(
+                "Reset Password 🔑",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Enter your registered email and we'll send you a link to "
+                    "reset your password.",
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.black.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: emailController,
+                    enabled: !sending,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => sendResetEmail(),
+                    decoration: InputDecoration(
+                      hintText: "Enter email",
+                      prefixIcon: const Icon(Icons.email_outlined),
+                      errorText: errorText,
+                      filled: true,
+                      fillColor: AppColors.lightGreen.withValues(alpha: 0.3),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: sending
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
+                  child: Text(
+                    "Cancel",
+                    style: TextStyle(
+                      color: Colors.black.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: sending ? null : sendResetEmail,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: sending
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text(
+                          "Send Link",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    emailController.dispose();
   }
 
   @override
@@ -258,7 +416,30 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 6),
+
+          // ── Forgot Password ──
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: isLoading ? null : handleForgotPassword,
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(0, 0),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text(
+                "Forgot Password?",
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.blue,
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 14),
 
           // ── Login Button ──
           SizedBox(
@@ -287,8 +468,81 @@ class _LoginPageState extends State<LoginPage> {
                     ),
             ),
           ),
+
+          // ── Google Sign-In ──
+          _buildGoogleAuthSection(),
         ],
       ),
+    );
+  }
+
+  // ────────────────────────────────────
+  //  GOOGLE SIGN-IN SECTION
+  // ────────────────────────────────────
+  Widget _buildGoogleAuthSection() {
+    final bool busy = googleLoading || isLoading;
+
+    return Column(
+      children: [
+        const SizedBox(height: 20),
+
+        // ── Divider ──
+        Row(
+          children: [
+            const Expanded(child: Divider(color: Colors.black12)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                "or continue with",
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.black.withValues(alpha: 0.45),
+                ),
+              ),
+            ),
+            const Expanded(child: Divider(color: Colors.black12)),
+          ],
+        ),
+
+        const SizedBox(height: 16),
+
+        // ── Google Button ──
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton(
+            onPressed: busy ? null : handleGoogleSignIn,
+            style: OutlinedButton.styleFrom(
+              backgroundColor: AppColors.white,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              side: BorderSide(color: Colors.black.withValues(alpha: 0.12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (googleLoading)
+                  const SizedBox(
+                    height: 18,
+                    width: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else
+                  const GoogleLogo(size: 20),
+                const SizedBox(width: 12),
+                Text(
+                  googleLoading ? "Signing in..." : "Continue with Google",
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -462,6 +716,9 @@ class _LoginPageState extends State<LoginPage> {
                     ),
             ),
           ),
+
+          // ── Google Sign-In ──
+          _buildGoogleAuthSection(),
         ],
       ),
     );
