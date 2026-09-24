@@ -9,10 +9,10 @@ class PetStatusBadge extends StatelessWidget {
   final bool compact;
 
   String get _label {
-    switch (status) {
-      case 'pending':
+    switch (PetStatus.normalise(status)) {
+      case PetStatus.pending:
         return 'Adoption Pending';
-      case 'adopted':
+      case PetStatus.adopted:
         return 'Adopted ❤️';
       default:
         return 'Available for Adoption';
@@ -20,10 +20,10 @@ class PetStatusBadge extends StatelessWidget {
   }
 
   Color get _color {
-    switch (status) {
-      case 'pending':
+    switch (PetStatus.normalise(status)) {
+      case PetStatus.pending:
         return AppColors.blue; // warm mochaccino
-      case 'adopted':
+      case PetStatus.adopted:
         return Colors.green.shade700;
       default:
         return AppColors.primary;
@@ -64,9 +64,37 @@ class PetStatus {
   static const pending = 'pending';
   static const adopted = 'adopted';
 
+  /// Canonical status for any stored variant.
+  ///
+  /// Older listings (and hand edited documents) may store 'Available',
+  /// 'Adoption Pending', 'Adopted ❤️', 'adoption in progress', … — comparing
+  /// those raw strings against 'available' silently hides the pets, so every
+  /// reader goes through here instead.
+  static String normalise(dynamic raw) {
+    final text = (raw?.toString() ?? '').trim().toLowerCase();
+    if (text.isEmpty) return available;
+
+    if (text.contains('available') || text.contains('active')) {
+      return available;
+    }
+    if (text.contains('pending') ||
+        text.contains('progress') ||
+        text.contains('reserved') ||
+        text.contains('hold')) {
+      return pending;
+    }
+    if (text.contains('adopt') ||
+        text.contains('sold') ||
+        text.contains('done') ||
+        text.contains('closed')) {
+      return adopted;
+    }
+    return available;
+  }
+
   /// Safe status read — missing/unknown fields default to available.
   static String of(Map<String, dynamic> data) =>
-      data['status']?.toString() ?? available;
+      normalise(data['status']);
 
   static bool isAvailable(Map<String, dynamic> data) =>
       of(data) == available;

@@ -117,7 +117,7 @@ class HomePage extends StatelessWidget {
                             ),
                             SizedBox(height: 6),
                             Text(
-                              "Adopt pets near you",
+                              "See pets within 10 km",
                               style: TextStyle(
                                 color: Colors.white70,
                                 fontSize: 13,
@@ -148,14 +148,18 @@ class HomePage extends StatelessWidget {
                 child: Row(
                   children: [
                     Expanded(
-                      child: Obx(() => Text(
-                            districtLabel,
-                            style: const TextStyle(
-                              color: AppColors.black,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          )),
+                      // NOTE: no inner Obx here — `districtLabel` is computed
+                      // by the parent Obx, which already subscribes to
+                      // `activeDistrict`. An Obx that reads no observable
+                      // throws "[Get] the improper use of a GetX".
+                      child: Text(
+                        districtLabel,
+                        style: const TextStyle(
+                          color: AppColors.black,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                     // 📍 Change district (also shown when detection failed)
                     IconButton(
@@ -224,16 +228,45 @@ class HomePage extends StatelessWidget {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              controller.loadError.value.isEmpty
-                                  ? "No pets available here yet 🐾"
-                                  : controller.loadError.value,
+                              controller.emptyStateTitle,
                               textAlign: TextAlign.center,
                               style: const TextStyle(
                                 color: AppColors.black,
-                                fontSize: 14,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
+                            if (controller.emptyStateDetail.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                controller.emptyStateDetail,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Colors.black54,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 8),
+                            // 🎯 One tap fix when the only listings here have an
+                            // adoption in progress (hidden by the default
+                            // "available only" status filter).
+                            if (controller.pendingPetCount.value > 0 &&
+                                !controller.hasActiveFilters)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primary,
+                                  ),
+                                  onPressed: () {
+                                    controller.statusFilter.value = 'pending';
+                                    controller.applyFilters();
+                                  },
+                                  icon: const Icon(Icons.pending_actions),
+                                  label: const Text("Show pending pets"),
+                                ),
+                              ),
                             if (controller.loadError.value.isNotEmpty)
                               TextButton.icon(
                                 onPressed: controller.refreshPets,
@@ -275,6 +308,7 @@ class HomePage extends StatelessWidget {
                           final distanceKm = pet['distanceKm']?.toString();
                           return PetCard(
                             compact: true,
+                            isMine: pet['isMine'] == true,
                             petId: pet['id']?.toString() ?? '',
                             mediaUrl: pet['mediaUrl']?.toString() ?? '',
                             mediaType: pet['mediaType']?.toString() ?? '',

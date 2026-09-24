@@ -5,14 +5,37 @@ import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
 
 import '../../services/location_service.dart';
+import '../../widgets/pet_status_badge.dart';
 
 class HomeController extends GetxController {
   var pets = [].obs;
   var isLoading = false.obs;
 
+  /// Separate list for the "Pets Near You" page so this single controller
+  /// can serve both screens without one overwriting the other's results.
+  var nearbyPets = [].obs;
+  var nearbyLoading = false.obs;
+  final RxString nearbyError = ''.obs;
+
+  /// "Pets Near You" is a strict radius search: only listings whose stored
+  /// coordinates are within this distance of the user are shown.
+  static const double nearbyRadiusKm = 10.0;
+
+  /// Diagnostics for the Nearby empty state.
+  final RxBool nearbyLocationMissing = false.obs;
+  final RxInt nearbyMissingCoords = 0.obs;
+  final RxInt nearbyBeyondRadius = 0.obs;
+
   /// Human readable reason when listings could not be loaded ('' = none).
   /// Surfaced in the UI so a failure is never silently shown as "no pets".
   final RxString loadError = ''.obs;
+
+  /// Diagnostics used by the empty states so the user always knows *why*
+  /// nothing is listed (no documents / pending / filters / error).
+  final RxInt totalPetDocs = 0.obs;
+  final RxInt ownPetCount = 0.obs;
+  final RxInt pendingPetCount = 0.obs;
+  final RxInt adoptedPetCount = 0.obs;
 
   /// District currently driving discovery ('' = all Kerala).
   final RxString activeDistrict = ''.obs;
@@ -32,6 +55,9 @@ class HomeController extends GetxController {
   /// Last fetched listings (unfiltered) so search/filters can be applied
   /// client side without hammering Firestore on every keystroke.
   List _allPets = [];
+
+  /// Same, for the "Pets Near You" page (kept separate on purpose).
+  List _allNearbyPets = [];
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
@@ -92,6 +118,59 @@ class HomeController extends GetxController {
     }
   }
 
+  /// True when a search query or any filter chip is active.
+  bool get hasActiveFilters =>
+      searchQuery.value.trim().isNotEmpty ||
+      (speciesFilter.value != null && speciesFilter.value!.isNotEmpty) ||
+      (genderFilter.value != null && genderFilter.value!.isNotEmpty) ||
+      (ageFilter.value != null && ageFilter.value!.isNotEmpty) ||
+      (statusFilter.value != null && statusFilter.value!.isNotEmpty);
+
+  /// Title of the discovery empty state.
+  ///
+  /// Explains *why* nothing is listed instead of just showing an empty grid,
+  /// which is what makes "I can't see the pets" impossible to diagnose.
+  String get emptyStateTitle {
+    if (loadError.value.isNotEmpty) return 'Could not load pets';
+    if (hasActiveFilters) return 'No pets match your search';
+    final district = activeDistrict.value;
+
+    if (totalPetDocs.value == 0) {
+      return 'No pets listed yet';
+    }
+    if (ownPetCount.value == totalPetDocs.value && ownPetCount.value > 0) {
+      return 'Only your own listings so far';
+    }
+    if (adoptedPetCount.value == totalPetDocs.value) {
+      return 'No available pets right now';
+    }
+    if (district.isEmpty) return 'No pets available in Kerala yet';
+    return 'No pets available in $district yet';
+  }
+
+  /// Supporting line under [emptyStateTitle]. '' hides the line.
+  String get emptyStateDetail {
+    if (loadError.value.isNotEmpty) return loadError.value;
+    if (hasActiveFilters) return 'Try clearing the search or the filters.';
+    if (totalPetDocs.value == 0) {
+      return 'No adoptable listings have been posted yet. Be the first to '
+          'list a pet for adoption 🐾';
+    }
+    if (ownPetCount.value > 0 &&
+        ownPetCount.value + adoptedPetCount.value >= totalPetDocs.value) {
+      return 'Your own pets are listed in Profile → My Listings. Adoptable '
+          'pets from other people will show up here.';
+    }
+    if (adoptedPetCount.value == totalPetDocs.value) {
+      return 'Every pet here has already been adopted ❤️';
+    }
+    if (pendingPetCount.value > 0) {
+      return '${pendingPetCount.value} pet(s) here have an adoption in '
+          'progress. Switch the Status filter to "pending" to see them.';
+    }
+    return 'Try another district — tap the 📍 icon above.';
+  }
+
   /// Resolves the district + coordinates without ever throwing.
   Future<void> _resolveDistrict({bool requestPermission = false}) async {
     try {
@@ -116,12 +195,15 @@ class HomeController extends GetxController {
     }
   }
 
-  /// Reads every pet document, keeps the adoptable ones that are not mine
-  /// and normalises them into UI friendly maps.
+  /// Reads every pet document, keeps the adoptable ones and normalises them
+  /// into UI friendly maps.
+  ///
+  /// [includeOwn] is false for the discovery feeds: a pet the user listed
+  /// themselves belongs in Profile → My Listings, never in the public feed.
   ///
   /// One malformed document can never break the whole list, and nothing is
   /// assumed to exist: older listings may miss status/media/coordinates.
-  Future<List> _fetchAvailablePets() async {
+  Future<List> _fetchAvailablePets({bool includeOwn = false}) async {
     final currentUid = _auth.currentUser?.uid;
 
     // No server side orderBy: legacy documents without `createdAt` would be
@@ -129,32 +211,52 @@ class HomeController extends GetxController {
     final snapshot = await FirebaseFirestore.instance.collection('pets').get();
 
     final result = <Map<String, dynamic>>[];
+    var mine = 0;
+    var pending = 0;
+    var adopted = 0;
 
     for (final doc in snapshot.docs) {
       try {
         final raw = doc.data();
 
-        // ❌ Skip my own pets
-        if (currentUid != null && raw['ownerId'] == currentUid) continue;
+        // Status is canonicalised so legacy casing ("Available", "Adoption
+        // Pending", "Adopted ❤️") is understood everywhere downstream.
+        final status = PetStatus.normalise(raw['status']);
+        final isMine =
+            currentUid != null && raw['ownerId']?.toString() == currentUid;
 
-        // Adopted pets are never shown. Pending pets are fetched but only
-        // surfaced when the user explicitly filters for them, so the default
-        // discovery view stays "available only".
-        final status = raw['status']?.toString() ?? 'available';
-        if (status == 'adopted' || status == 'sold') continue;
+        // Permanently adopted pets are never part of discovery. They stay
+        // visible to their owner in My Listings.
+        if (status == PetStatus.adopted) {
+          adopted++;
+          continue;
+        }
 
-        result.add(_normalisePet(doc.id, raw));
+        if (status == PetStatus.pending) pending++;
+
+        // 🚫 The owner's own listings stay out of the discovery feed —
+        // they are managed from Profile → My Listings.
+        if (isMine) {
+          mine++;
+          if (!includeOwn) continue;
+        }
+
+        final pet = _normalisePet(doc.id, raw);
+        pet['isMine'] = isMine;
+        result.add(pet);
       } catch (e) {
         debugPrint('⚠️ Skipping pet ${doc.id}: $e');
       }
     }
 
-    if (snapshot.docs.isEmpty) {
-      debugPrint('🐾 pets collection returned 0 documents — nothing to show.');
-    } else {
-      debugPrint(
-          '🐾 pets: ${snapshot.docs.length} document(s), ${result.length} shown on discovery.');
-    }
+    totalPetDocs.value = snapshot.docs.length;
+    ownPetCount.value = mine;
+    pendingPetCount.value = pending;
+    adoptedPetCount.value = adopted;
+
+    debugPrint(
+        '🐾 pets: ${snapshot.docs.length} doc(s) • ${result.length} usable • '
+        '$mine own • $pending pending • $adopted adopted/sold');
 
     return result;
   }
@@ -293,9 +395,10 @@ class HomeController extends GetxController {
     // 🔓 STATUS — defaults to "available" only (adopted pets are never shown
     // in discovery); the user can explicitly switch the filter to "pending".
     final status = statusFilter.value;
-    final wanted = (status == null || status.isEmpty) ? 'available' : status;
+    final wanted =
+        (status == null || status.isEmpty) ? PetStatus.available : status;
     result = result.where(
-        (p) => (p['status'] ?? 'available').toString() == wanted);
+        (p) => PetStatus.normalise(p['status']) == wanted);
 
     final list = result.toList();
 
@@ -369,40 +472,92 @@ class HomeController extends GetxController {
     }
   }
 
-  /// 🔥 LOAD NEARBY PETS (district page)
+  /// 🔥 LOAD NEARBY PETS — strict 10 km radius around the user
+  ///
+  /// Unlike Home (district based discovery), this page only returns pets whose
+  /// stored coordinates are within [nearbyRadiusKm] of the current position,
+  /// sorted nearest first. Pets without coordinates cannot be proven to be
+  /// nearby, so they are counted (for the empty state) but not listed.
+  ///
+  /// Writes to [nearbyPets] so this screen never overwrites the Home feed
+  /// (both share this one controller).
   Future<void> loadNearbyPets() async {
-    isLoading.value = true;
-    loadError.value = '';
+    nearbyLoading.value = true;
+    nearbyError.value = '';
+    nearbyLocationMissing.value = false;
+    nearbyMissingCoords.value = 0;
+    nearbyBeyondRadius.value = 0;
+
     try {
       // Ask for the permission here: this page is explicitly about "near you".
       await _resolveDistrict(requestPermission: true);
 
       final allPets = await _fetchAvailablePets();
 
-      // Pets with coordinates can show a distance. If none of them have
-      // coordinates we still list the district pets instead of showing an
-      // empty page.
-      final withCoords = allPets
-          .where((p) =>
-              _toDouble(p['latitude']) != null &&
-              _toDouble(p['longitude']) != null)
-          .toList();
-
-      final source = withCoords.isEmpty ? allPets : withCoords;
-      _allPets = source;
-
-      try {
-        pets.value = _sortAndFilter(source);
-      } catch (e) {
-        debugPrint('⚠️ Nearby filter error: $e');
-        pets.value = source;
+      // A radius search is impossible without the user's own position.
+      if (userLat == null || userLng == null) {
+        nearbyLocationMissing.value = true;
+        nearbyMissingCoords.value = allPets.length;
+        _allNearbyPets = [];
+        nearbyPets.value = [];
+        debugPrint(
+            '📍 Nearby: no user position — cannot apply the ${nearbyRadiusKm.toStringAsFixed(0)} km radius.');
+        return;
       }
+
+      final radiusMeters = nearbyRadiusKm * 1000;
+      final withinRadius = <Map<String, dynamic>>[];
+      var missingCoords = 0;
+      var beyondRadius = 0;
+
+      for (final pet in allPets) {
+        final distanceMeters = _distanceTo(pet);
+
+        if (distanceMeters == null) {
+          // No usable coordinates → distance unknown, never claimed as near.
+          missingCoords++;
+          continue;
+        }
+
+        if (distanceMeters > radiusMeters) {
+          beyondRadius++;
+          continue;
+        }
+
+        pet['distanceKm'] = (distanceMeters / 1000).toStringAsFixed(1);
+        withinRadius.add(pet);
+      }
+
+      // Nearest first.
+      withinRadius.sort((a, b) => (_distanceTo(a) ?? double.maxFinite)
+          .compareTo(_distanceTo(b) ?? double.maxFinite));
+
+      _allNearbyPets = withinRadius;
+      nearbyPets.value = withinRadius;
+      nearbyMissingCoords.value = missingCoords;
+      nearbyBeyondRadius.value = beyondRadius;
+
+      debugPrint(
+          '📍 Nearby: ${withinRadius.length} pet(s) within '
+          '${nearbyRadiusKm.toStringAsFixed(0)} km • $beyondRadius beyond • '
+          '$missingCoords without coordinates');
     } catch (e, st) {
       debugPrint('❌ Nearby Error: $e\n$st');
-      loadError.value = _friendlyError(e);
-      pets.value = [];
+      nearbyError.value = _friendlyError(e);
+      nearbyPets.value = [];
     } finally {
-      isLoading.value = false;
+      nearbyLoading.value = false;
+    }
+  }
+
+  /// Re-applies search/filters on the already fetched nearby listings.
+  void applyNearbyFilters() {
+    try {
+      nearbyPets.value = _sortAndFilter(
+        _allNearbyPets.isNotEmpty ? _allNearbyPets : nearbyPets.toList(),
+      );
+    } catch (e) {
+      debugPrint('⚠️ Nearby local filter error: $e');
     }
   }
 

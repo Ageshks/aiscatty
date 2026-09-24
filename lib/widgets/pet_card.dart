@@ -12,6 +12,9 @@ class PetCard extends StatefulWidget {
   final VoidCallback? onTap;
   final bool compact;
 
+  /// True when the listing belongs to the signed in user ("Your listing").
+  final bool isMine;
+
   const PetCard({
     super.key,
     required this.petId,
@@ -22,6 +25,7 @@ class PetCard extends StatefulWidget {
     required this.location,
     this.onTap,
     this.compact = false,
+    this.isMine = false,
   });
 
   @override
@@ -39,8 +43,12 @@ class _PetCardState extends State<PetCard>
   late AnimationController _heartController;
   late Animation<double> _scaleAnimation;
 
-  // ✅ FIXED (use existing controller)
-  final favController = Get.find<FavoritesController>();
+  // ✅ FIXED (use existing controller) — created on demand so the card can
+  // never crash when the controller is not registered yet.
+  late final FavoritesController favController =
+      Get.isRegistered<FavoritesController>()
+          ? Get.find<FavoritesController>()
+          : Get.put(FavoritesController(), permanent: true);
 
   @override
   void initState() {
@@ -217,6 +225,29 @@ class _PetCardState extends State<PetCard>
                   ),
                 ),
               ),
+
+              /// 🏷️ "YOUR LISTING" BADGE (only for the owner's own pets)
+              if (widget.isMine)
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      "Your listing",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: widget.compact ? 9 : 11,
+                      ),
+                    ),
+                  ),
+                ),
 
               /// ❤️ FAVORITE BUTTON
               Positioned(

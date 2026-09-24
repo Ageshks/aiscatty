@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import '../../services/location_service.dart';
 import '../../widgets/pet_card.dart';
 import '../../utils/app_colors.dart';
 import 'home_controller.dart';
@@ -39,57 +40,106 @@ class _NearbyPetsPageState extends State<NearbyPetsPage> {
 
       body: Obx(() {
 
-        // ⏳ LOADING
-        if (controller.isLoading.value) {
+        // ⏳ LOADING (only on the first load, so retries keep the list)
+        if (controller.nearbyLoading.value && controller.nearbyPets.isEmpty) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        // 🐱 EMPTY STATE
-        if (controller.pets.isEmpty) {
+        // 🐱 EMPTY / ERROR STATE
+        if (controller.nearbyPets.isEmpty) {
           return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
 
-                Image.network(
-                  "https://cdn-icons-png.flaticon.com/512/616/616430.png",
-                  height: 120,
-                ),
-
-                const SizedBox(height: 20),
-
-                const Text(
-                  "No pets nearby 🐾",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                  Icon(
+                    controller.nearbyError.value.isEmpty
+                        ? Icons.pets
+                        : Icons.cloud_off,
+                    size: 72,
+                    color: AppColors.primary.withOpacity(0.5),
                   ),
-                ),
 
-                const SizedBox(height: 6),
+                  const SizedBox(height: 20),
 
-                Obx(() {
-                  final district = controller.activeDistrict.value;
-                  return Text(
-                    district.isEmpty
-                        ? "Select your district to see pets near you"
-                        : "No pets listed in $district yet",
-                    style: const TextStyle(color: Colors.grey),
-                  );
-                }),
-
-                const SizedBox(height: 20),
-
-                ElevatedButton(
-                  onPressed: () {
-                    controller.loadNearbyPets();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
+                  Text(
+                    controller.nearbyError.value.isEmpty
+                        ? "No pets nearby 🐾"
+                        : "Could not load pets",
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                  child: const Text("Retry"),
-                ),
-              ],
+
+                  const SizedBox(height: 6),
+
+                  Obx(() {
+                    final error = controller.nearbyError.value;
+                    if (error.isNotEmpty) {
+                      return Text(
+                        error,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.grey),
+                      );
+                    }
+                    final district = controller.activeDistrict.value;
+                    if (controller.nearbyLocationMissing.value) {
+                      return Text(
+                        "We could not get your current location. "
+                          "Allow location access to see pets within 10 km.",
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.grey),
+                      );
+                    }
+                    final beyond = controller.nearbyBeyondRadius.value;
+                    final noCoords = controller.nearbyMissingCoords.value;
+                    if (beyond == 0 && noCoords == 0) {
+                      return Text(
+                        district.isEmpty
+                            ? "Select your district to see pets near you"
+                            : "No pets listed in $district District yet",
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.grey),
+                      );
+                    }
+                    return Text(
+                      [
+                        if (beyond > 0)
+                          '$beyond pet(s) are further than 10 km away.',
+                        if (noCoords > 0)
+                          '$noCoords listing(s) have no location yet.',
+                      ].join(' '),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.grey),
+                    );
+                  }),
+
+                  const SizedBox(height: 20),
+
+                  ElevatedButton(
+                    onPressed: () {
+                      controller.loadNearbyPets();
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                    ),
+                    child: const Text("Retry"),
+                  ),
+
+                  TextButton.icon(
+                    onPressed: () async {
+                      await LocationService.to.pickDistrictManually(context);
+                      await controller.loadNearbyPets();
+                    },
+                    icon: const Icon(Icons.location_on_outlined),
+                    label: const Text("Select your district"),
+                  ),
+                ],
+              ),
             ),
           );
         }
@@ -103,7 +153,7 @@ class _NearbyPetsPageState extends State<NearbyPetsPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Adopt a pet from your district",
+                    "Adopt a pet within 10 km of you",
                     style: TextStyle(fontSize: 13, color: Colors.grey[700]),
                   ),
                   const SizedBox(height: 2),
@@ -111,8 +161,8 @@ class _NearbyPetsPageState extends State<NearbyPetsPage> {
                     final district = controller.activeDistrict.value;
                     return Text(
                       district.isEmpty
-                          ? "Showing pets across Kerala"
-                          : "Showing pets in $district District",
+                          ? "Allow location to see pets around you"
+                          : "Showing pets within 10 km • $district District",
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -125,9 +175,9 @@ class _NearbyPetsPageState extends State<NearbyPetsPage> {
             ),
             Expanded(
               child: ListView.builder(
-                itemCount: controller.pets.length,
+                itemCount: controller.nearbyPets.length,
                 itemBuilder: (context, index) {
-                  final pet = controller.pets[index];
+                  final pet = controller.nearbyPets[index];
                   final location = pet['location']?.toString() ?? '';
                   final petDistrict = pet['district']?.toString() ?? '';
                   final place = [
@@ -138,6 +188,7 @@ class _NearbyPetsPageState extends State<NearbyPetsPage> {
 
                   return PetCard(
                     petId: pet['id']?.toString() ?? '',
+                    isMine: pet['isMine'] == true,
                     mediaUrl: pet['mediaUrl']?.toString() ?? '',
                     mediaType: pet['mediaType']?.toString() ?? 'image',
                     name: pet['name']?.toString() ?? 'Pet',
